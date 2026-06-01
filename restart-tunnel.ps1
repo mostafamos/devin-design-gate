@@ -162,7 +162,24 @@ Write-Host ""
 Write-Host "Check URLs:"
 Write-Host "$PublicBaseUrl/health"
 Write-Host "$PublicBaseUrl/github/webhook"
-Write-Host "$PublicBaseUrl/report-html"
+Write-Host "$PublicBaseUrl/report"
 Write-Host "$PublicBaseUrl/docs"
 
-Open-Report -ReportUrl "$PublicBaseUrl/report-html#latest-run"
+Open-Report -ReportUrl "$PublicBaseUrl/report"
+
+Write-Host ""
+Write-Host "====================================================="
+Write-Host "Uvicorn and Cloudflared are UP and running."
+Write-Host "Report URL: $PublicBaseUrl/report"
+Write-Host "Press Ctrl+C to stop the app and exit."
+Write-Host "====================================================="
+
+try {
+    while ($true) {
+        Start-Sleep -Seconds 1
+    }
+} finally {
+    Write-Host "Stopping uvicorn and cloudflared..."
+    Stop-ByName -Name "uvicorn"
+    Stop-ByName -Name "cloudflared"
+}

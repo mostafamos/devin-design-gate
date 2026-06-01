@@ -92,7 +92,7 @@ Write-Host ""
 Write-Host "Local check URLs:"
 Write-Host "$LocalBaseUrl/health"
 Write-Host "$LocalBaseUrl/github/webhook"
-Write-Host "$LocalBaseUrl/report-html"
+Write-Host "$LocalBaseUrl/report"
 Write-Host "$LocalBaseUrl/docs"
 
 if ($PublicBaseUrl) {
@@ -100,7 +100,7 @@ if ($PublicBaseUrl) {
     Write-Host "Current Cloudflare check URLs from .env:"
     Write-Host "$PublicBaseUrl/health"
     Write-Host "$PublicBaseUrl/github/webhook"
-    Write-Host "$PublicBaseUrl/report-html"
+    Write-Host "$PublicBaseUrl/report"
     Write-Host "$PublicBaseUrl/docs"
     Write-Host ""
     Write-Host "GitHub webhook Payload URL:"
@@ -114,4 +114,20 @@ $ReportBaseUrl = $LocalBaseUrl
 if ($PublicBaseUrl) {
     $ReportBaseUrl = $PublicBaseUrl
 }
-Open-Report -ReportUrl "$ReportBaseUrl/report-html#latest-run"
+Open-Report -ReportUrl "$ReportBaseUrl/report"
+
+Write-Host ""
+Write-Host "====================================================="
+Write-Host "Uvicorn is UP and running."
+Write-Host "Report URL: $ReportBaseUrl/report"
+Write-Host "Press Ctrl+C to stop the app and exit."
+Write-Host "====================================================="
+
+try {
+    while ($true) {
+        Start-Sleep -Seconds 1
+    }
+} finally {
+    Write-Host "Stopping uvicorn..."
+    Stop-Uvicorn
+}
