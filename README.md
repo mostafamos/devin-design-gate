@@ -33,7 +33,7 @@ https://your-current-cloudflare-url.trycloudflare.com/github/webhook
 
 In GitHub webhook settings, enable `Issues` events. Re-adding the `devin:design-first` label sends an `issues.labeled` event and triggers the pipeline again.
 
-Enable `Pushes` and `Pull requests` too if you want `/report` to update when Devin pushes more commits to a `devin/*` branch or synchronizes a pull request.
+Enable `Pushes` and `Pull requests` too if you want `/report-html` to update when Devin pushes more commits to a `devin/*` branch or synchronizes a pull request.
 
 ## Health
 
@@ -46,7 +46,7 @@ Browser URLs:
 ```text
 http://localhost:8000/health
 http://localhost:8000/github/webhook
-http://localhost:8000/report
+http://localhost:8000/report-html
 http://localhost:8000/docs
 ```
 
@@ -55,7 +55,7 @@ With the current Cloudflare tunnel, replace the host with your latest tunnel bas
 ```text
 https://your-current-cloudflare-url.trycloudflare.com/health
 https://your-current-cloudflare-url.trycloudflare.com/github/webhook
-https://your-current-cloudflare-url.trycloudflare.com/report
+https://your-current-cloudflare-url.trycloudflare.com/report-html
 https://your-current-cloudflare-url.trycloudflare.com/docs
 ```
 
@@ -64,12 +64,12 @@ What each URL does:
 ```text
 /health         Confirms the app is running and shows TARGET_REPO and MOCK_DEVIN.
 /github/webhook Browser-safe status page for the webhook endpoint. GitHub must POST here.
-/report         Shows the HTML pipeline report with sessions, stages, PRs, and branch updates.
+/report-html    Shows the HTML pipeline report with sessions, stages, PRs, and branch updates.
 /report.json    Returns the raw stored pipeline runs and stage history as JSON.
 /check          Reconciles the report with open upstream PRs from this fork's `devin/*` branches.
 /docs           FastAPI interactive API page for trying endpoints manually.
 
-The `/report` page includes a 30-second countdown and calls `/check` automatically until a Devin PR is found.
+The `/report-html` page includes a 30-second countdown and calls `/check` automatically until a Devin PR is found.
 ```
 
 ## Test GitHub token can comment
@@ -93,7 +93,7 @@ curl -X POST http://localhost:8000/simulate ^
 ## Report
 
 ```bash
-curl http://localhost:8000/report
+curl http://localhost:8000/report-html
 curl http://localhost:8000/report.json
 ```
 
@@ -113,7 +113,7 @@ the app starts the design-gated pipeline:
 triage -> spec -> lld -> implementation -> verification
 ```
 
-Each stage is saved to SQLite and appears in `/report`. Because the app does not dedupe labeled events, removing `devin:design-first` and adding it again starts another full run.
+Each stage is saved to SQLite and appears in `/report-html`. Because the app does not dedupe labeled events, removing `devin:design-first` and adding it again starts another full run.
 
 Push webhooks for branches named `devin/*` and pull request `synchronize` webhooks are recorded as extra report events on the latest pipeline for that repo. The report links to the compare URL or PR so you can see when Devin pushed a new change after the initial run.
 
@@ -123,6 +123,6 @@ If GitHub missed a webhook or the app was offline when a PR was opened, call:
 curl http://localhost:8000/check-and-update-report
 ```
 
-This scans open PRs in `UPSTREAM_REPO` or `apache/superset`, finds PRs whose head repo is `TARGET_REPO` and branch starts with `devin/`, then updates `/report`. The short alias `/check` and typo-compatible `/chec-and-update-report` work too.
+This scans open PRs in `UPSTREAM_REPO` or `apache/superset`, finds PRs whose head repo is `TARGET_REPO` and branch starts with `devin/`, then updates `/report-html`. The short alias `/check` and typo-compatible `/chec-and-update-report` work too.
 
-Keep `MOCK_DEVIN=true` until GitHub comments, SQLite, `/simulate`, and `/report` all work.
+Keep `MOCK_DEVIN=true` until GitHub comments, SQLite, `/simulate`, and `/report-html` all work.

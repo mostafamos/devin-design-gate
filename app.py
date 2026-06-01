@@ -505,7 +505,7 @@ def check_and_update_report(
         "upstream_repo": upstream,
         "updated_prs": updated,
         "skipped_prs": skipped,
-        "report_url": "/report#latest-run",
+        "report_url": "/report-html#latest-run",
     }
 
 
@@ -694,6 +694,6 @@ def report_json():
     return store.report()
 
 
-@app.get("/report", response_class=HTMLResponse)
-def report():
+@app.get("/report-html", response_class=HTMLResponse)
+def report_html():
     return HTMLResponse(render_report_html(store.report()))

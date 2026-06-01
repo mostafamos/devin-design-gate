@@ -92,7 +92,7 @@ Write-Host ""
 Write-Host "Local check URLs:"
 Write-Host "$LocalBaseUrl/health"
 Write-Host "$LocalBaseUrl/github/webhook"
-Write-Host "$LocalBaseUrl/report"
+Write-Host "$LocalBaseUrl/report-html"
 Write-Host "$LocalBaseUrl/docs"
 
 if ($PublicBaseUrl) {
@@ -100,7 +100,7 @@ if ($PublicBaseUrl) {
     Write-Host "Current Cloudflare check URLs from .env:"
     Write-Host "$PublicBaseUrl/health"
     Write-Host "$PublicBaseUrl/github/webhook"
-    Write-Host "$PublicBaseUrl/report"
+    Write-Host "$PublicBaseUrl/report-html"
     Write-Host "$PublicBaseUrl/docs"
     Write-Host ""
     Write-Host "GitHub webhook Payload URL:"
@@ -114,4 +114,4 @@ $ReportBaseUrl = $LocalBaseUrl
 if ($PublicBaseUrl) {
     $ReportBaseUrl = $PublicBaseUrl
 }
-Open-Report -ReportUrl "$ReportBaseUrl/report#latest-run"
+Open-Report -ReportUrl "$ReportBaseUrl/report-html#latest-run"
