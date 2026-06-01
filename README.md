@@ -12,6 +12,8 @@ cp .env.example .env
 docker-compose up -d --build
 ```
 
+The image excludes `.env`, logs, SQLite files, and local runtime artifacts via `.dockerignore`. Compose loads `.env` at runtime and persists SQLite under `./data`.
+
 Minimum local `.env` for simulation:
 
 ```text
@@ -21,6 +23,7 @@ DEVIN_API_KEY=dummy
 DEVIN_API_BASE_URL=https://api.devin.ai
 MOCK_DEVIN=true
 PUBLIC_WEBHOOK_URL=
+GITHUB_WEBHOOK_ID=
 ```
 
 ## Run (Local Python)
@@ -39,6 +42,14 @@ Quick Cloudflare tunnels change URL every time they restart.
 ```bash
 cloudflared tunnel --url http://localhost:8000
 ```
+
+On Windows, use the smart runner:
+
+```powershell
+.\run.ps1
+```
+
+It restarts FastAPI, checks whether the current Cloudflare URL still works, and only creates a new tunnel when needed. When a new tunnel is created, it writes `PUBLIC_WEBHOOK_URL` to `.env` and tries to update the matching GitHub webhook payload URL. If that GitHub update fails, it logs the manual Payload URL to use. Set `GITHUB_WEBHOOK_ID` in `.env` if the repo has multiple `/github/webhook` hooks.
 
 When cloudflared prints a new URL, set this in `.env`:
 

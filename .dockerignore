@@ -1,0 +1,14 @@
+.git
+.env
+__pycache__/
+*.pyc
+*.pyo
+*.log
+*.db
+*.db-*
+*.db-shm
+*.db-wal
+data/
+cloudflared.log
+uvicorn.log
+run.log
