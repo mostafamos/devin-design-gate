@@ -182,6 +182,39 @@ function Test-Tunnel {
     }
 }
 
+function Wait-ForPublicReport {
+    param([string]$ReportUrl)
+
+    Log-Step "INFO" "Waiting for Cloudflare to serve the report. This can lag for a few seconds after tunnel creation."
+    for ($i = 1; $i -le 45; $i++) {
+        try {
+            $response = Invoke-WebRequest -Uri $ReportUrl -TimeoutSec 5 -UseBasicParsing
+            if ($response.StatusCode -ge 200 -and $response.StatusCode -lt 300) {
+                Log-Step "SUCCESS" "Public report is live after attempt ${i}: $ReportUrl"
+                return $true
+            }
+
+            Log-Step "INFO" "Report not live yet, HTTP $($response.StatusCode). Retry $i/45."
+        } catch {
+            $statusCode = 0
+            if ($_.Exception.Response) {
+                $statusCode = [int]$_.Exception.Response.StatusCode
+            }
+
+            if ($statusCode) {
+                Log-Step "INFO" "Report not live yet, HTTP ${statusCode}. Retry $i/45."
+            } else {
+                Log-Step "INFO" "Report not live yet: $($_.Exception.Message). Retry $i/45."
+            }
+        }
+
+        Start-Sleep -Seconds 2
+    }
+
+    Log-Step "WARN" "Public report did not become ready yet. Try opening it again shortly: $ReportUrl"
+    return $false
+}
+
 function Wait-ForTunnelUrl {
     for ($i = 0; $i -lt 45; $i++) {
         if (Test-Path $CloudflaredLog) {
@@ -314,8 +347,10 @@ if (-not $tunnelHealthy) {
 
 Log-Step "INFO" "Health URL: $publicBaseUrl/health"
 Log-Step "INFO" "Webhook URL: $newWebhookUrl"
-Log-Step "INFO" "Report URL: $publicBaseUrl/report-html"
-Open-Report -ReportUrl "$publicBaseUrl/report-html"
+$reportUrl = "$publicBaseUrl/report-html"
+Log-Step "INFO" "Report URL: $reportUrl"
+Wait-ForPublicReport -ReportUrl $reportUrl | Out-Null
+Open-Report -ReportUrl $reportUrl
 
 Write-Host ""
 Write-Host "====================================================="
