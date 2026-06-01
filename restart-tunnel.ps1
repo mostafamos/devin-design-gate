@@ -20,9 +20,53 @@ function Stop-ByName {
     Get-Process -Name $Name -ErrorAction SilentlyContinue | Stop-Process -Force
 }
 
+function Get-PortListenerPids {
+    param([int]$Port)
+
+    $pattern = "^\s*TCP\s+\S+:$Port\s+\S+\s+LISTENING\s+(\d+)\s*$"
+    netstat -ano | ForEach-Object {
+        if ($_ -match $pattern) {
+            [int]$Matches[1]
+        }
+    } | Sort-Object -Unique
+}
+
+function Stop-Uvicorn {
+    Stop-ByName -Name "uvicorn"
+
+    foreach ($listenerPid in Get-PortListenerPids -Port $Port) {
+        Write-Host "Stopping process $listenerPid listening on port $Port..."
+        Stop-Process -Id $listenerPid -Force -ErrorAction SilentlyContinue
+    }
+}
+
+function Wait-ForPortToClose {
+    for ($i = 0; $i -lt 20; $i++) {
+        if (-not (Get-PortListenerPids -Port $Port)) {
+            return
+        }
+        Start-Sleep -Milliseconds 500
+    }
+
+    throw "Port $Port is still in use after stopping the old server."
+}
+
 function Wait-ForHealth {
+    param([System.Diagnostics.Process]$StartedProcess)
+
     $healthUrl = "$LocalBaseUrl/health"
     for ($i = 0; $i -lt 30; $i++) {
+        if (Test-Path $UvicornLog) {
+            $logTail = Get-Content -Path $UvicornLog -Tail 40 -ErrorAction SilentlyContinue
+            if ($logTail -match "error while attempting to bind|address already in use|only one usage of each socket address") {
+                throw "New FastAPI process failed to bind port $Port. Check $UvicornLog."
+            }
+        }
+
+        if ($StartedProcess -and $StartedProcess.HasExited) {
+            throw "New FastAPI launcher exited before becoming healthy. Check $UvicornLog."
+        }
+
         try {
             Invoke-RestMethod -Uri $healthUrl -TimeoutSec 2 | Out-Null
             return
@@ -97,8 +141,8 @@ Write-Host "Stopping old cloudflared tunnel..."
 Stop-ByName -Name "cloudflared"
 
 Write-Host "Stopping old uvicorn server..."
-Stop-ByName -Name "uvicorn"
-Start-Sleep -Seconds 1
+Stop-Uvicorn
+Wait-ForPortToClose
 
 if (Test-Path $UvicornLog) {
     Clear-Content -Path $UvicornLog
@@ -156,28 +200,28 @@ if (-not $NoPrompt) {
 }
 
 Write-Host "Starting FastAPI on $LocalBaseUrl..."
-Start-Process -WindowStyle Hidden -FilePath "powershell.exe" -ArgumentList @(
+$UvicornProcess = Start-Process -WindowStyle Hidden -PassThru -FilePath "powershell.exe" -ArgumentList @(
     "-NoProfile",
     "-Command",
     "Set-Location '$ProjectRoot'; uvicorn app:app --host 127.0.0.1 --port $Port *> '$UvicornLog'"
 )
 
-Wait-ForHealth
+Wait-ForHealth -StartedProcess $UvicornProcess
 Write-Host "FastAPI is healthy."
 
 Write-Host ""
 Write-Host "Check URLs:"
 Write-Host "$PublicBaseUrl/health"
 Write-Host "$PublicBaseUrl/github/webhook"
-Write-Host "$PublicBaseUrl/report"
+Write-Host "$PublicBaseUrl/report-html"
 Write-Host "$PublicBaseUrl/docs"
 
-Open-Report -ReportUrl "$PublicBaseUrl/report"
+Open-Report -ReportUrl "$PublicBaseUrl/report-html"
 
 Write-Host ""
 Write-Host "====================================================="
 Write-Host "Uvicorn and Cloudflared are UP and running."
-Write-Host "Report URL: $PublicBaseUrl/report"
+Write-Host "Report URL: $PublicBaseUrl/report-html"
 Write-Host "Press Ctrl+C to stop the app and exit."
 Write-Host "====================================================="
 
@@ -187,6 +231,6 @@ try {
     }
 } finally {
     Write-Host "Stopping uvicorn and cloudflared..."
-    Stop-ByName -Name "uvicorn"
+    Stop-Uvicorn
     Stop-ByName -Name "cloudflared"
 }

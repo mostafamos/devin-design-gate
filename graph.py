@@ -1,6 +1,7 @@
 import os
 from typing import Optional, TypedDict
 
+from dotenv import load_dotenv
 from langgraph.graph import END, StateGraph
 
 from clients import DevinClient, GitHubClient
@@ -12,6 +13,8 @@ from prompts import (
     implementation_prompt,
     verification_prompt,
 )
+
+load_dotenv()
 
 
 class PipelineState(TypedDict, total=False):
@@ -39,6 +42,10 @@ def _artifact(result: dict) -> str:
 
 def _session_id(result: dict) -> str:
     return result.get("id") or result.get("session_id") or ""
+
+
+def _devin_push_token() -> str:
+    return os.getenv("LET-DEVIN-PUSH") or os.getenv("LET_DEVIN_PUSH") or ""
 
 
 def triage_node(state: PipelineState) -> PipelineState:
@@ -71,7 +78,14 @@ def lld_node(state: PipelineState) -> PipelineState:
 def implementation_node(state: PipelineState) -> PipelineState:
     result = devin.create_session(
         "implementation",
-        implementation_prompt(state["repo"], state["issue_number"], state["issue_title"], state["spec"], state["lld"]),
+        implementation_prompt(
+            state["repo"],
+            state["issue_number"],
+            state["issue_title"],
+            state["spec"],
+            state["lld"],
+            push_token=_devin_push_token(),
+        ),
     )
     artifact = _artifact(result)
     mock_pr = f"https://github.com/{state['repo']}/pull/mock-{state['issue_number']}"

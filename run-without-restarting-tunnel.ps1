@@ -10,13 +10,53 @@ $EnvPath = Join-Path $ProjectRoot ".env"
 $UvicornLog = Join-Path $ProjectRoot "uvicorn.log"
 $LocalBaseUrl = "http://127.0.0.1:$Port"
 
+function Get-PortListenerPids {
+    param([int]$Port)
+
+    $pattern = "^\s*TCP\s+\S+:$Port\s+\S+\s+LISTENING\s+(\d+)\s*$"
+    netstat -ano | ForEach-Object {
+        if ($_ -match $pattern) {
+            [int]$Matches[1]
+        }
+    } | Sort-Object -Unique
+}
+
 function Stop-Uvicorn {
     Get-Process -Name "uvicorn" -ErrorAction SilentlyContinue | Stop-Process -Force
+
+    foreach ($listenerPid in Get-PortListenerPids -Port $Port) {
+        Write-Host "Stopping process $listenerPid listening on port $Port..."
+        Stop-Process -Id $listenerPid -Force -ErrorAction SilentlyContinue
+    }
+}
+
+function Wait-ForPortToClose {
+    for ($i = 0; $i -lt 20; $i++) {
+        if (-not (Get-PortListenerPids -Port $Port)) {
+            return
+        }
+        Start-Sleep -Milliseconds 500
+    }
+
+    throw "Port $Port is still in use after stopping the old server."
 }
 
 function Wait-ForHealth {
+    param([System.Diagnostics.Process]$StartedProcess)
+
     $healthUrl = "$LocalBaseUrl/health"
     for ($i = 0; $i -lt 30; $i++) {
+        if (Test-Path $UvicornLog) {
+            $logTail = Get-Content -Path $UvicornLog -Tail 40 -ErrorAction SilentlyContinue
+            if ($logTail -match "error while attempting to bind|address already in use|only one usage of each socket address") {
+                throw "New FastAPI process failed to bind port $Port. Check $UvicornLog."
+            }
+        }
+
+        if ($StartedProcess -and $StartedProcess.HasExited) {
+            throw "New FastAPI launcher exited before becoming healthy. Check $UvicornLog."
+        }
+
         try {
             Invoke-RestMethod -Uri $healthUrl -TimeoutSec 2 | Out-Null
             return
@@ -61,7 +101,7 @@ function Open-Report {
 if (-not $NoRestart) {
     Write-Host "Stopping old uvicorn server..."
     Stop-Uvicorn
-    Start-Sleep -Seconds 1
+    Wait-ForPortToClose
 }
 
 if (Test-Path $UvicornLog) {
@@ -73,13 +113,13 @@ if (Test-Path $UvicornLog) {
 }
 
 Write-Host "Starting FastAPI on $LocalBaseUrl without restarting cloudflared..."
-Start-Process -WindowStyle Hidden -FilePath "powershell.exe" -ArgumentList @(
+$UvicornProcess = Start-Process -WindowStyle Hidden -PassThru -FilePath "powershell.exe" -ArgumentList @(
     "-NoProfile",
     "-Command",
     "Set-Location '$ProjectRoot'; uvicorn app:app --host 127.0.0.1 --port $Port *> '$UvicornLog'"
 )
 
-Wait-ForHealth
+Wait-ForHealth -StartedProcess $UvicornProcess
 Write-Host "FastAPI is healthy."
 
 $WebhookUrl = Get-EnvValue -Name "PUBLIC_WEBHOOK_URL"
@@ -92,7 +132,7 @@ Write-Host ""
 Write-Host "Local check URLs:"
 Write-Host "$LocalBaseUrl/health"
 Write-Host "$LocalBaseUrl/github/webhook"
-Write-Host "$LocalBaseUrl/report"
+Write-Host "$LocalBaseUrl/report-html"
 Write-Host "$LocalBaseUrl/docs"
 
 if ($PublicBaseUrl) {
@@ -100,7 +140,7 @@ if ($PublicBaseUrl) {
     Write-Host "Current Cloudflare check URLs from .env:"
     Write-Host "$PublicBaseUrl/health"
     Write-Host "$PublicBaseUrl/github/webhook"
-    Write-Host "$PublicBaseUrl/report"
+    Write-Host "$PublicBaseUrl/report-html"
     Write-Host "$PublicBaseUrl/docs"
     Write-Host ""
     Write-Host "GitHub webhook Payload URL:"
@@ -124,12 +164,12 @@ $ReportBaseUrl = $LocalBaseUrl
 if ($PublicBaseUrl) {
     $ReportBaseUrl = $PublicBaseUrl
 }
-Open-Report -ReportUrl "$ReportBaseUrl/report"
+Open-Report -ReportUrl "$ReportBaseUrl/report-html"
 
 Write-Host ""
 Write-Host "====================================================="
 Write-Host "Uvicorn is UP and running."
-Write-Host "Report URL: $ReportBaseUrl/report"
+Write-Host "Report URL: $ReportBaseUrl/report-html"
 Write-Host "Press Ctrl+C to stop the app and exit."
 Write-Host "====================================================="
 

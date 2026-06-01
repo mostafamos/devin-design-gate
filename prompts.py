@@ -53,7 +53,27 @@ Spec:
 """
 
 
-def implementation_prompt(repo: str, issue_number: int, issue_title: str, spec: str, lld: str) -> str:
+def push_token_instructions(push_token: str) -> str:
+    if not push_token:
+        return ""
+
+    return f"""
+GitHub push credential:
+- A GitHub PAT is available for this task.
+- Use this PAT only to push the implementation branch and create the pull request: {push_token}
+- Do not print, log, commit, or mention the PAT in the PR, commits, issue comments, or test output.
+- Prefer a temporary credentialed HTTPS remote for the push, then remove or restore that remote immediately after pushing.
+"""
+
+
+def implementation_prompt(
+    repo: str,
+    issue_number: int,
+    issue_title: str,
+    spec: str,
+    lld: str,
+    push_token: str = "",
+) -> str:
     return f"""
 Repository: {repo}
 Issue #{issue_number}: {issue_title}
@@ -62,6 +82,7 @@ Implement only this approved design.
 Open a PR to {repo}.
 Avoid unrelated refactors.
 PR body must include root cause, files changed, tests run, risks.
+{push_token_instructions(push_token)}
 
 SPEC:
 {spec}
