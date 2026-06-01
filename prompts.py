@@ -10,6 +10,15 @@ Goal: preserve actionable failure reasons. Do not redesign Reports.
 """
 
 
+RISK_HANDLING = """
+Risk handling:
+- Medium or high impact is not a reason to stop.
+- Treat risk as a constraint: make the smallest targeted change, preserve existing behavior, and add focused tests.
+- If the root cause involves REPORT_SCHEDULE_ERROR_NOTIFICATION_MARKER, preserve its query/deduplication role while keeping the original actionable error in error_message.
+- Do not ask for confirmation unless the requested fix is impossible without missing credentials, missing repository access, or an ambiguous product decision.
+"""
+
+
 def triage_prompt(repo: str, issue_title: str, issue_body: str) -> str:
     return f"""
 Repository: {repo}
@@ -19,6 +28,7 @@ Issue: {issue_title}
 
 TRIAGE ONLY.
 Classify impact, suspected files, likely root cause, risk, and test strategy.
+Call out whether any medium/high risk can be managed by a narrow change and tests.
 
 Issue body:
 {issue_body}
@@ -31,6 +41,7 @@ Repository: {repo}
 Issue: {issue_title}
 
 {SUPERSET_REPORTS_CONTEXT}
+{RISK_HANDLING}
 
 Create a concise technical specification:
 problem, non-goals, acceptance criteria, test plan, observability expectations.
@@ -44,6 +55,8 @@ def lld_prompt(repo: str, issue_title: str, spec: str) -> str:
     return f"""
 Repository: {repo}
 Issue: {issue_title}
+
+{RISK_HANDLING}
 
 Create a low-level design:
 files to inspect, functions/classes, smallest code change, edge cases, test commands.
@@ -77,6 +90,8 @@ def implementation_prompt(
     return f"""
 Repository: {repo}
 Issue #{issue_number}: {issue_title}
+
+{RISK_HANDLING}
 
 Implement only this approved design.
 Open a PR to {repo}.
