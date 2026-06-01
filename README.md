@@ -33,6 +33,8 @@ https://your-current-cloudflare-url.trycloudflare.com/github/webhook
 
 In GitHub webhook settings, enable `Issues` events. Re-adding the `devin:design-first` label sends an `issues.labeled` event and triggers the pipeline again.
 
+Enable `Pushes` and `Pull requests` too if you want `/report` to update when Devin pushes more commits to a `devin/*` branch or synchronizes a pull request.
+
 ## Health
 
 ```bash
@@ -62,7 +64,8 @@ What each URL does:
 ```text
 /health         Confirms the app is running and shows TARGET_REPO and MOCK_DEVIN.
 /github/webhook Browser-safe status page for the webhook endpoint. GitHub must POST here.
-/report         Shows stored pipeline runs and stage history.
+/report         Shows the HTML pipeline report with sessions, stages, PRs, and branch updates.
+/report.json    Returns the raw stored pipeline runs and stage history as JSON.
 /docs           FastAPI interactive API page for trying endpoints manually.
 ```
 
@@ -88,6 +91,7 @@ curl -X POST http://localhost:8000/simulate ^
 
 ```bash
 curl http://localhost:8000/report
+curl http://localhost:8000/report.json
 ```
 
 ## Label Trigger Flow
@@ -107,5 +111,7 @@ triage -> spec -> lld -> implementation -> verification
 ```
 
 Each stage is saved to SQLite and appears in `/report`. Because the app does not dedupe labeled events, removing `devin:design-first` and adding it again starts another full run.
+
+Push webhooks for branches named `devin/*` and pull request `synchronize` webhooks are recorded as extra report events on the latest pipeline for that repo. The report links to the compare URL or PR so you can see when Devin pushed a new change after the initial run.
 
 Keep `MOCK_DEVIN=true` until GitHub comments, SQLite, `/simulate`, and `/report` all work.

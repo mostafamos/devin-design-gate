@@ -74,6 +74,21 @@ function Set-PublicWebhookUrl {
     Set-Content -Path $EnvPath -Value $newLines
 }
 
+function Open-Report {
+    param([string]$ReportUrl)
+
+    Write-Host ""
+    Write-Host "Report:"
+    Write-Host $ReportUrl
+
+    try {
+        Start-Process $ReportUrl
+        Write-Host "Opened report in browser."
+    } catch {
+        Write-Host "Could not open report automatically. Open the URL above."
+    }
+}
+
 if (-not (Test-Path $CloudflaredPath)) {
     throw "cloudflared.exe was not found at $CloudflaredPath"
 }
@@ -149,3 +164,5 @@ Write-Host "$PublicBaseUrl/health"
 Write-Host "$PublicBaseUrl/github/webhook"
 Write-Host "$PublicBaseUrl/report"
 Write-Host "$PublicBaseUrl/docs"
+
+Open-Report -ReportUrl "$PublicBaseUrl/report#latest-run"

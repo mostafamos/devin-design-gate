@@ -37,27 +37,34 @@ def _artifact(result: dict) -> str:
     return result.get("output") or str(result)
 
 
+def _session_id(result: dict) -> str:
+    return result.get("id") or result.get("session_id") or ""
+
+
 def triage_node(state: PipelineState) -> PipelineState:
     result = devin.create_session("triage", triage_prompt(state["repo"], state["issue_title"], state["issue_body"]))
     artifact = _artifact(result)
-    store.add_stage(state["pipeline_id"], "triage", "completed", result.get("id", ""), artifact)
-    github.comment_issue(state["repo"], state["issue_number"], f"Design-gate stage completed: triage\n\nSession: `{result.get('id', '')}`")
+    session_id = _session_id(result)
+    store.add_stage(state["pipeline_id"], "triage", "completed", session_id, artifact)
+    github.comment_issue(state["repo"], state["issue_number"], f"Design-gate stage completed: triage\n\nSession: `{session_id}`")
     return {"triage": artifact}
 
 
 def spec_node(state: PipelineState) -> PipelineState:
     result = devin.create_session("spec", spec_prompt(state["repo"], state["issue_title"], state["triage"]))
     artifact = _artifact(result)
-    store.add_stage(state["pipeline_id"], "spec", "completed", result.get("id", ""), artifact)
-    github.comment_issue(state["repo"], state["issue_number"], f"Design-gate stage completed: spec\n\nSession: `{result.get('id', '')}`")
+    session_id = _session_id(result)
+    store.add_stage(state["pipeline_id"], "spec", "completed", session_id, artifact)
+    github.comment_issue(state["repo"], state["issue_number"], f"Design-gate stage completed: spec\n\nSession: `{session_id}`")
     return {"spec": artifact}
 
 
 def lld_node(state: PipelineState) -> PipelineState:
     result = devin.create_session("lld", lld_prompt(state["repo"], state["issue_title"], state["spec"]))
     artifact = _artifact(result)
-    store.add_stage(state["pipeline_id"], "lld", "completed", result.get("id", ""), artifact)
-    github.comment_issue(state["repo"], state["issue_number"], f"Design-gate stage completed: LLD\n\nSession: `{result.get('id', '')}`")
+    session_id = _session_id(result)
+    store.add_stage(state["pipeline_id"], "lld", "completed", session_id, artifact)
+    github.comment_issue(state["repo"], state["issue_number"], f"Design-gate stage completed: LLD\n\nSession: `{session_id}`")
     return {"lld": artifact}
 
 
@@ -69,9 +76,10 @@ def implementation_node(state: PipelineState) -> PipelineState:
     artifact = _artifact(result)
     mock_pr = f"https://github.com/{state['repo']}/pull/mock-{state['issue_number']}"
     pr_url = result.get("pr_url") or mock_pr
-    store.add_stage(state["pipeline_id"], "implementation", "completed", result.get("id", ""), artifact)
+    session_id = _session_id(result)
+    store.add_stage(state["pipeline_id"], "implementation", "completed", session_id, artifact)
     store.set_pr(state["pipeline_id"], pr_url)
-    github.comment_issue(state["repo"], state["issue_number"], f"Implementation stage completed\n\nPR: {pr_url}\nSession: `{result.get('id', '')}`")
+    github.comment_issue(state["repo"], state["issue_number"], f"Implementation stage completed\n\nPR: {pr_url}\nSession: `{session_id}`")
     return {"pr_url": pr_url}
 
 
@@ -81,8 +89,9 @@ def verification_node(state: PipelineState) -> PipelineState:
         verification_prompt(state["repo"], state["issue_title"], state["pr_url"], state["spec"], state["lld"]),
     )
     artifact = _artifact(result)
-    store.add_stage(state["pipeline_id"], "verification", "completed", result.get("id", ""), artifact)
-    github.comment_issue(state["repo"], state["issue_number"], f"Verification completed\n\nSession: `{result.get('id', '')}`")
+    session_id = _session_id(result)
+    store.add_stage(state["pipeline_id"], "verification", "completed", session_id, artifact)
+    github.comment_issue(state["repo"], state["issue_number"], f"Verification completed\n\nSession: `{session_id}`")
     return {"verification": artifact}
 
 

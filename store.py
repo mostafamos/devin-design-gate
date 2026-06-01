@@ -80,6 +80,29 @@ class Store:
                 (pr_url, "implementation", now(), pipeline_id),
             )
 
+    def latest_pipeline_for_repo(self, repo: str) -> Dict[str, Any] | None:
+        with self.connect() as con:
+            con.row_factory = sqlite3.Row
+            row = con.execute(
+                "SELECT * FROM pipelines WHERE repo=? ORDER BY updated_at DESC LIMIT 1",
+                (repo,),
+            ).fetchone()
+        return dict(row) if row else None
+
+    def add_branch_update(self, repo: str, stage: str, artifact: Dict[str, Any]) -> Dict[str, Any] | None:
+        pipeline = self.latest_pipeline_for_repo(repo)
+        if not pipeline:
+            return None
+
+        self.add_stage(
+            pipeline["id"],
+            stage,
+            "completed",
+            artifact.get("session_id") or "",
+            json.dumps(artifact, indent=2, sort_keys=True),
+        )
+        return pipeline
+
     def report(self) -> Dict[str, Any]:
         with self.connect() as con:
             con.row_factory = sqlite3.Row
