@@ -66,7 +66,10 @@ What each URL does:
 /github/webhook Browser-safe status page for the webhook endpoint. GitHub must POST here.
 /report         Shows the HTML pipeline report with sessions, stages, PRs, and branch updates.
 /report.json    Returns the raw stored pipeline runs and stage history as JSON.
+/check          Reconciles the report with open upstream PRs from this fork's `devin/*` branches.
 /docs           FastAPI interactive API page for trying endpoints manually.
+
+The `/report` page includes a 30-second countdown and calls `/check` automatically until a Devin PR is found.
 ```
 
 ## Test GitHub token can comment
@@ -113,5 +116,13 @@ triage -> spec -> lld -> implementation -> verification
 Each stage is saved to SQLite and appears in `/report`. Because the app does not dedupe labeled events, removing `devin:design-first` and adding it again starts another full run.
 
 Push webhooks for branches named `devin/*` and pull request `synchronize` webhooks are recorded as extra report events on the latest pipeline for that repo. The report links to the compare URL or PR so you can see when Devin pushed a new change after the initial run.
+
+If GitHub missed a webhook or the app was offline when a PR was opened, call:
+
+```bash
+curl http://localhost:8000/check-and-update-report
+```
+
+This scans open PRs in `UPSTREAM_REPO` or `apache/superset`, finds PRs whose head repo is `TARGET_REPO` and branch starts with `devin/`, then updates `/report`. The short alias `/check` and typo-compatible `/chec-and-update-report` work too.
 
 Keep `MOCK_DEVIN=true` until GitHub comments, SQLite, `/simulate`, and `/report` all work.

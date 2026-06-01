@@ -31,6 +31,12 @@ class CommentTestPayload(BaseModel):
     issue_number: int
 
 
+class CheckReportPayload(BaseModel):
+    upstream_repo: str | None = None
+    target_repo: str | None = None
+    state: str = "open"
+
+
 def trigger_label() -> str:
     return os.getenv("TRIGGER_LABEL", "devin:design-first")
 
@@ -181,6 +187,48 @@ def render_report_html(report_data: dict[str, Any]) -> str:
     .stat {{ padding: 16px; }}
     .stat span {{ display: block; color: var(--muted); font-size: 13px; }}
     .stat strong {{ display: block; margin-top: 6px; font-size: 28px; }}
+    .check-bar {{
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      margin: 0 0 18px;
+      padding: 14px 16px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #fff8e8;
+      color: #5c3a00;
+      box-shadow: var(--shadow);
+    }}
+    .check-bar strong {{ font-size: 15px; }}
+    .check-bar span {{ color: #7c4a00; }}
+    .check-actions {{ display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }}
+    .check-countdown {{
+      display: inline-flex;
+      min-width: 76px;
+      justify-content: center;
+      align-items: center;
+      padding: 6px 10px;
+      border-radius: 999px;
+      background: #172033;
+      color: #fff;
+      font-variant-numeric: tabular-nums;
+      font-weight: 700;
+    }}
+    .check-button {{
+      border: 0;
+      border-radius: 6px;
+      padding: 8px 12px;
+      background: #0f766e;
+      color: #fff;
+      font: inherit;
+      font-weight: 700;
+      cursor: pointer;
+    }}
+    .check-button:disabled {{
+      opacity: 0.7;
+      cursor: wait;
+    }}
     .run-card {{ padding: 22px; margin-top: 16px; }}
     .run-top {{ display: flex; gap: 16px; justify-content: space-between; align-items: start; }}
     .eyebrow {{ margin: 0 0 6px; color: var(--accent); font-size: 13px; font-weight: 700; }}
@@ -234,6 +282,16 @@ def render_report_html(report_data: dict[str, Any]) -> str:
     <p>Pipeline sessions, stage outcomes, PR activity, and recent Devin branch updates.</p>
   </header>
   <main>
+    <div class="check-bar">
+      <div>
+        <strong>Auto-check is active</strong>
+        <span>When the countdown reaches zero, the report calls `/check` and refreshes if a Devin PR is found.</span>
+      </div>
+      <div class="check-actions">
+        <span class="check-countdown" id="check-countdown">30</span>
+        <button class="check-button" id="check-now" type="button">Check now</button>
+      </div>
+    </div>
     <section class="stats">
       <div class="stat"><span>Total runs</span><strong>{len(pipelines)}</strong></div>
       <div class="stat"><span>Completed runs</span><strong>{completed}</strong></div>
@@ -241,6 +299,52 @@ def render_report_html(report_data: dict[str, Any]) -> str:
     </section>
     {cards_html}
   </main>
+  <script>
+    const countdownEl = document.getElementById('check-countdown');
+    const checkButton = document.getElementById('check-now');
+    const checkUrl = '/check';
+    const countdownSeconds = 30;
+    let remaining = countdownSeconds;
+    let checking = false;
+
+    function updateCountdown() {{
+      countdownEl.textContent = String(remaining).padStart(2, '0');
+    }}
+
+    async function runCheck() {{
+      if (checking) {{
+        return;
+      }}
+      checking = true;
+      checkButton.disabled = true;
+      try {{
+        const response = await fetch(checkUrl, {{ headers: {{ 'Accept': 'application/json' }} }});
+        const data = await response.json();
+        if (data && data.updated > 0) {{
+          window.location.reload();
+          return;
+        }}
+      }} catch (error) {{
+        console.warn('check failed', error);
+      }} finally {{
+        checking = false;
+        checkButton.disabled = false;
+      }}
+      remaining = countdownSeconds;
+      updateCountdown();
+    }}
+
+    checkButton.addEventListener('click', runCheck);
+    updateCountdown();
+    window.setInterval(() => {{
+      remaining -= 1;
+      if (remaining <= 0) {{
+        runCheck();
+        return;
+      }}
+      updateCountdown();
+    }}, 1000);
+  </script>
 </body>
 </html>"""
 
@@ -279,7 +383,8 @@ def _record_push_event(payload: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def _record_pull_request_sync(payload: dict[str, Any]) -> dict[str, Any]:
+def _record_pull_request_event(payload: dict[str, Any]) -> dict[str, Any]:
+    action = payload.get("action") or "updated"
     pr = payload.get("pull_request") or {}
     head = pr.get("head") or {}
     head_repo = head.get("repo") or {}
@@ -293,18 +398,114 @@ def _record_pull_request_sync(payload: dict[str, Any]) -> dict[str, Any]:
     artifact = {
         "branch": branch,
         "sha": head.get("sha") or "",
-        "message": f"Pull request synchronized: {pr.get('title') or 'untitled PR'}",
+        "message": f"Pull request {action}: {pr.get('title') or 'untitled PR'}",
+        "pr_number": pr.get("number") or "",
+        "pr_url": pr.get("html_url") or "",
+        "base_repo": ((pr.get("base") or {}).get("repo") or {}).get("full_name") or "",
+        "base_branch": (pr.get("base") or {}).get("ref") or "",
         "pusher": ((payload.get("sender") or {}).get("login")) or "",
         "timestamp": pr.get("updated_at") or "",
         "compare_url": pr.get("html_url") or "",
     }
-    pipeline = store.add_branch_update(repo, "pr-synchronize", artifact)
+    stage = f"pr-{action.replace('_', '-')}"
+    pipeline = store.add_pr_update(repo, stage, pr.get("html_url") or "", artifact)
     return {
         "ok": True,
         "triggered": bool(pipeline),
-        "reason": "recorded pull request synchronization" if pipeline else "no pipeline found for repo",
+        "reason": f"recorded pull request {action}" if pipeline else "no pipeline found for repo",
         "pipeline_id": pipeline.get("id") if pipeline else None,
         "branch": branch,
+        "pr_url": pr.get("html_url") or "",
+    }
+
+
+def _pr_artifact(pr: dict[str, Any], action: str) -> dict[str, Any]:
+    head = pr.get("head") or {}
+    base = pr.get("base") or {}
+    base_repo = base.get("repo") or {}
+    user = pr.get("user") or {}
+    return {
+        "branch": head.get("ref") or "",
+        "sha": head.get("sha") or "",
+        "message": f"Pull request {action}: {pr.get('title') or 'untitled PR'}",
+        "pr_number": pr.get("number") or "",
+        "pr_url": pr.get("html_url") or "",
+        "base_repo": base_repo.get("full_name") or "",
+        "base_branch": base.get("ref") or "",
+        "pusher": user.get("login") or "",
+        "timestamp": pr.get("updated_at") or "",
+        "compare_url": pr.get("html_url") or "",
+    }
+
+
+def check_and_update_report(
+    upstream_repo: str | None = None,
+    target_repo: str | None = None,
+    state: str = "open",
+) -> dict[str, Any]:
+    upstream = upstream_repo or os.getenv("UPSTREAM_REPO", "apache/superset")
+    target = target_repo or os.getenv("TARGET_REPO")
+    if not target:
+        raise HTTPException(status_code=400, detail="target_repo or TARGET_REPO is required")
+
+    github_client = GitHubClient()
+    try:
+        prs = github_client.list_pull_requests(upstream, state=state)
+    except Exception as exc:
+        return {
+            "ok": False,
+            "updated": 0,
+            "matched": 0,
+            "reason": f"could not query GitHub pull requests: {exc}",
+            "target_repo": target,
+            "upstream_repo": upstream,
+        }
+
+    pipeline = None
+    for candidate in store.report().get("pipelines", []):
+        if candidate["repo"] == target:
+            pipeline = candidate
+            break
+    if not pipeline:
+        return {
+            "ok": True,
+            "updated": 0,
+            "matched": 0,
+            "reason": "no pipeline found for target repo",
+            "target_repo": target,
+            "upstream_repo": upstream,
+        }
+
+    matched = []
+    updated = []
+    skipped = []
+    for pr in prs:
+        head = pr.get("head") or {}
+        head_repo = head.get("repo") or {}
+        branch = head.get("ref") or ""
+        if head_repo.get("full_name") != target or not branch.startswith("devin/"):
+            continue
+
+        pr_url = pr.get("html_url") or ""
+        stage = f"pr-{(pr.get('state') or 'open').replace('_', '-')}"
+        matched.append({"number": pr.get("number"), "url": pr_url, "branch": branch})
+        if pr_url and store.has_pr_event(pipeline["id"], pr_url):
+            skipped.append({"number": pr.get("number"), "reason": "already recorded"})
+            continue
+
+        artifact = _pr_artifact(pr, pr.get("state") or "open")
+        store.add_pr_update(target, stage, pr_url, artifact)
+        updated.append({"number": pr.get("number"), "url": pr_url, "branch": branch, "stage": stage})
+
+    return {
+        "ok": True,
+        "updated": len(updated),
+        "matched": len(matched),
+        "target_repo": target,
+        "upstream_repo": upstream,
+        "updated_prs": updated,
+        "skipped_prs": skipped,
+        "report_url": "/report#latest-run",
     }
 
 
@@ -363,8 +564,15 @@ async def github_webhook(request: Request, x_github_event: str | None = Header(d
     if x_github_event == "push":
         return _record_push_event(payload)
 
-    if x_github_event == "pull_request" and payload.get("action") == "synchronize":
-        return _record_pull_request_sync(payload)
+    if x_github_event == "pull_request" and payload.get("action") in {
+        "opened",
+        "reopened",
+        "ready_for_review",
+        "synchronize",
+        "edited",
+        "closed",
+    }:
+        return _record_pull_request_event(payload)
 
     if x_github_event != "issues":
         return {"ok": True, "triggered": False, "reason": "ignored event"}
@@ -425,6 +633,60 @@ def github_comment_test(payload: CommentTestPayload):
         body="GitHub token test from Devin Design Gate orchestrator.",
     )
     return {"ok": True, "result": result}
+
+
+@app.get("/check-and-update-report")
+def check_and_update_report_get(
+    upstream_repo: str | None = None,
+    target_repo: str | None = None,
+    state: str = "open",
+):
+    return check_and_update_report(upstream_repo=upstream_repo, target_repo=target_repo, state=state)
+
+
+@app.get("/check")
+def check_and_update_report_short_get(
+    upstream_repo: str | None = None,
+    target_repo: str | None = None,
+    state: str = "open",
+):
+    return check_and_update_report(upstream_repo=upstream_repo, target_repo=target_repo, state=state)
+
+
+@app.get("/chec-and-update-report")
+def check_and_update_report_typo_get(
+    upstream_repo: str | None = None,
+    target_repo: str | None = None,
+    state: str = "open",
+):
+    return check_and_update_report(upstream_repo=upstream_repo, target_repo=target_repo, state=state)
+
+
+@app.post("/check-and-update-report")
+def check_and_update_report_post(payload: CheckReportPayload):
+    return check_and_update_report(
+        upstream_repo=payload.upstream_repo,
+        target_repo=payload.target_repo,
+        state=payload.state,
+    )
+
+
+@app.post("/check")
+def check_and_update_report_short_post(payload: CheckReportPayload):
+    return check_and_update_report(
+        upstream_repo=payload.upstream_repo,
+        target_repo=payload.target_repo,
+        state=payload.state,
+    )
+
+
+@app.post("/chec-and-update-report")
+def check_and_update_report_typo_post(payload: CheckReportPayload):
+    return check_and_update_report(
+        upstream_repo=payload.upstream_repo,
+        target_repo=payload.target_repo,
+        state=payload.state,
+    )
 
 
 @app.get("/report.json")

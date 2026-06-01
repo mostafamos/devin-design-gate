@@ -20,10 +20,11 @@ class Store:
     def connect(self):
         if self._memory_connection is not None:
             return self._memory_connection
-        return sqlite3.connect(self.path)
+        return sqlite3.connect(self.path, timeout=30)
 
     def init(self) -> None:
         with self.connect() as con:
+            con.execute("PRAGMA journal_mode=WAL")
             con.execute("""
             CREATE TABLE IF NOT EXISTS pipelines (
                 id TEXT PRIMARY KEY,
@@ -102,6 +103,32 @@ class Store:
             json.dumps(artifact, indent=2, sort_keys=True),
         )
         return pipeline
+
+    def add_pr_update(self, repo: str, stage: str, pr_url: str, artifact: Dict[str, Any]) -> Dict[str, Any] | None:
+        pipeline = self.latest_pipeline_for_repo(repo)
+        if not pipeline:
+            return None
+
+        self.set_pr(pipeline["id"], pr_url)
+        self.add_stage(
+            pipeline["id"],
+            stage,
+            "completed",
+            artifact.get("session_id") or "",
+            json.dumps(artifact, indent=2, sort_keys=True),
+        )
+        return pipeline
+
+    def has_pr_event(self, pipeline_id: str, pr_url: str, stage: str | None = None) -> bool:
+        query = "SELECT 1 FROM stages WHERE pipeline_id=? AND artifact LIKE ?"
+        params: tuple[Any, ...] = (pipeline_id, f"%{pr_url}%")
+        if stage:
+            query += " AND stage=?"
+            params = (pipeline_id, f"%{pr_url}%", stage)
+
+        with self.connect() as con:
+            row = con.execute(query, params).fetchone()
+        return row is not None
 
     def report(self) -> Dict[str, Any]:
         with self.connect() as con:

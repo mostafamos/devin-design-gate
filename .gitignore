@@ -4,5 +4,7 @@ __pycache__/
 *.log
 *.db
 *.db-journal
+*.db-shm
+*.db-wal
 .pytest_cache/
 pytest-cache-files-*/

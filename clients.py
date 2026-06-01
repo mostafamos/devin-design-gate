@@ -35,6 +35,15 @@ class GitHubClient:
         self.token = os.getenv("GITHUB_TOKEN", "")
         self.api = "https://api.github.com"
 
+    def _headers(self) -> Dict[str, str]:
+        headers = {
+            "Accept": "application/vnd.github+json",
+            "X-GitHub-Api-Version": "2022-11-28",
+        }
+        if self.token:
+            headers["Authorization"] = f"Bearer {self.token}"
+        return headers
+
     def comment_issue(self, repo: str, issue_number: int, body: str) -> Dict[str, Any]:
         if not self.token:
             return {"ok": False, "skipped": True, "reason": "GITHUB_TOKEN is empty"}
@@ -42,11 +51,7 @@ class GitHubClient:
         try:
             resp = requests.post(
                 f"{self.api}/repos/{repo}/issues/{issue_number}/comments",
-                headers={
-                    "Authorization": f"Bearer {self.token}",
-                    "Accept": "application/vnd.github+json",
-                    "X-GitHub-Api-Version": "2022-11-28",
-                },
+                headers=self._headers(),
                 json={"body": body},
                 timeout=30,
             )
@@ -61,3 +66,13 @@ class GitHubClient:
                 "skipped": True,
                 "reason": str(e),
             }
+
+    def list_pull_requests(self, repo: str, state: str = "open") -> list[Dict[str, Any]]:
+        resp = requests.get(
+            f"{self.api}/repos/{repo}/pulls",
+            headers=self._headers(),
+            params={"state": state, "per_page": 100, "sort": "updated", "direction": "desc"},
+            timeout=30,
+        )
+        resp.raise_for_status()
+        return resp.json()
