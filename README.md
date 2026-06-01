@@ -2,7 +2,17 @@
 
 Minimal FastAPI + LangGraph orchestrator for a design-gated Devin remediation workflow.
 
-## Run
+## Run (Docker)
+
+The recommended way to run this project is using Docker Compose.
+
+```bash
+cp .env.example .env
+# edit .env with GITHUB_TOKEN, TARGET_REPO, and PUBLIC_WEBHOOK_URL
+docker-compose up -d --build
+```
+
+## Run (Local Python)
 
 ```bash
 cp .env.example .env
