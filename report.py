@@ -219,6 +219,70 @@ def escape(value: Any, quote: bool = False) -> str:
     return html.escape(str(value or ""), quote=quote)
 
 
+PROGRESS_STEPS = [
+    ("triage", "Triage"),
+    ("spec", "Spec"),
+    ("lld", "LLD"),
+    ("implementation", "Implementation"),
+    ("verification", "Verification"),
+    ("branch-update", "Push"),
+    ("pr-open", "PR"),
+]
+
+
+def progress_state(run: dict[str, Any]) -> dict[str, Any]:
+    stage_names = [str(stage.get("stage", "")) for stage in run.get("stages", [])]
+    completed = set(stage_names)
+    if any(stage.startswith("pr-") for stage in stage_names):
+        completed.add("pr-open")
+
+    current = ""
+    for key, _label in PROGRESS_STEPS:
+        if key not in completed:
+            current = key
+            break
+
+    if not current:
+        current = "done"
+
+    return {"completed": completed, "current": current}
+
+
+def render_progress(run: dict[str, Any], is_latest: bool) -> str:
+    if not is_latest:
+        return ""
+
+    state = progress_state(run)
+    current = state["current"]
+    completed = state["completed"]
+    items = []
+    for key, label in PROGRESS_STEPS:
+        classes = ["progress-step"]
+        if key in completed:
+            classes.append("is-complete")
+        if key == current:
+            classes.append("is-current")
+        items.append(f'<li class="{" ".join(classes)}"><span></span><b>{escape(label)}</b></li>')
+
+    if current == "done":
+        headline = "Current progress: PR opened"
+    else:
+        active_label = next((label for key, label in PROGRESS_STEPS if key == current), "Working")
+        headline = f"Current progress: {active_label}"
+
+    return f"""
+      <div class="progress-box">
+        <div class="progress-head">
+          <strong>{escape(headline)}</strong>
+          <span>Live report reloads when a new stage, push, or PR event arrives.</span>
+        </div>
+        <ol class="progress-tracker">
+          {''.join(items)}
+        </ol>
+      </div>
+    """
+
+
 def render_stage(stage: dict[str, Any]) -> str:
     artifact = stage["artifact_map"]
     details = []
@@ -277,6 +341,7 @@ def render_run(run: dict[str, Any], is_latest: bool = False) -> str:
     classes = "run-card run-card-latest" if is_latest else "run-card"
     anchor = ' id="latest-run"' if is_latest else ""
     latest_badge = '<span class="latest-badge">Most recent run</span>' if is_latest else ""
+    progress_html = render_progress(run, is_latest)
     return f"""
     <section class="{classes}"{anchor}>
       <div class="run-header">
@@ -291,6 +356,7 @@ def render_run(run: dict[str, Any], is_latest: bool = False) -> str:
           <span>{run.get("event_count", 0)} events</span>
         </div>
       </div>
+      {progress_html}
       <ol class="stage-list">
         {stage_html or '<li class="empty">No events recorded for this run.</li>'}
       </ol>
@@ -334,6 +400,9 @@ def render_issue(issue: dict[str, Any], is_latest: bool) -> str:
 
 def render_report_html(report_data: dict[str, Any]) -> str:
     issues = group_report(report_data)
+    raw_stages = [stage for pipeline in report_data.get("pipelines", []) for stage in pipeline.get("stages", [])]
+    latest_stage_id = max((int(stage.get("id") or 0) for stage in raw_stages), default=0)
+    latest_updated_at = max((str(pipeline.get("updated_at") or "") for pipeline in report_data.get("pipelines", [])), default="")
     total_runs = sum(len(issue["runs"]) for issue in issues)
     total_events = sum(run.get("event_count", 0) for issue in issues for run in issue["runs"])
     total_sessions = sum(run.get("session_count", 0) for issue in issues for run in issue["runs"])
@@ -462,6 +531,73 @@ def render_report_html(report_data: dict[str, Any]) -> str:
       background: #f0f9ff;
       box-shadow: 0 16px 34px rgba(14, 165, 233, .18);
     }}
+    .progress-box {{
+      margin-top: 18px;
+      padding: 14px;
+      border: 1px solid #7dd3fc;
+      border-radius: 12px;
+      background: #ffffff;
+    }}
+    .progress-head {{
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      color: #0c4a6e;
+      font-size: 14px;
+    }}
+    .progress-head span {{ color: var(--muted); }}
+    .progress-tracker {{
+      display: grid;
+      grid-template-columns: repeat(7, minmax(0, 1fr));
+      gap: 8px;
+      list-style: none;
+      padding: 0;
+      margin: 14px 0 0;
+    }}
+    .progress-step {{
+      min-width: 0;
+      padding: 10px 8px;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      background: #f8fafc;
+      color: #475467;
+      text-align: center;
+      font-size: 12px;
+      font-weight: 800;
+    }}
+    .progress-step span {{
+      display: block;
+      width: 12px;
+      height: 12px;
+      margin: 0 auto 6px;
+      border-radius: 999px;
+      background: #cbd5e1;
+    }}
+    .progress-step.is-complete {{
+      border-color: #99f6e4;
+      background: #ecfdf5;
+      color: #115e59;
+    }}
+    .progress-step.is-complete span {{ background: #0f766e; }}
+    .progress-step.is-current {{
+      border-color: #0ea5e9;
+      background: #e0f2fe;
+      color: #075985;
+      animation: pulseCurrent 1.1s ease-in-out infinite;
+    }}
+    .progress-step.is-current span {{
+      background: #0ea5e9;
+      box-shadow: 0 0 0 0 rgba(14, 165, 233, .55);
+      animation: pulseDot 1.1s ease-out infinite;
+    }}
+    @keyframes pulseCurrent {{
+      0%, 100% {{ box-shadow: 0 0 0 rgba(14, 165, 233, 0); }}
+      50% {{ box-shadow: 0 0 0 4px rgba(14, 165, 233, .18); }}
+    }}
+    @keyframes pulseDot {{
+      0% {{ box-shadow: 0 0 0 0 rgba(14, 165, 233, .55); }}
+      100% {{ box-shadow: 0 0 0 8px rgba(14, 165, 233, 0); }}
+    }}
     .latest-badge {{
       display: inline-flex;
       align-items: center;
@@ -492,6 +628,8 @@ def render_report_html(report_data: dict[str, Any]) -> str:
       .stats {{ grid-template-columns: 1fr 1fr; }}
       .check-bar, .issue-header, .run-header {{ display: block; }}
       .check-actions, .status, .run-badges {{ margin-top: 12px; }}
+      .progress-head {{ display: block; }}
+      .progress-tracker {{ grid-template-columns: repeat(2, minmax(0, 1fr)); }}
     }}
     @media (max-width: 520px) {{
       .stats {{ grid-template-columns: 1fr; }}
@@ -508,8 +646,8 @@ def render_report_html(report_data: dict[str, Any]) -> str:
   <main>
     <div class="check-bar">
       <div>
-        <strong>Auto-check is active</strong>
-        <span>When the countdown reaches zero, the report calls `/check` and refreshes if a Devin PR is found.</span>
+        <strong>Live report is active</strong>
+        <span>When the countdown reaches zero, the report checks for new stages, pushes, and PRs.</span>
       </div>
       <div class="check-actions">
         <span class="check-countdown" id="check-countdown">30</span>
@@ -528,6 +666,12 @@ def render_report_html(report_data: dict[str, Any]) -> str:
     const countdownEl = document.getElementById('check-countdown');
     const checkButton = document.getElementById('check-now');
     const checkUrl = '/check';
+    const reportStateUrl = '/report-state';
+    const initialReportState = {{
+      latestStageId: {latest_stage_id},
+      totalEvents: {total_events},
+      latestUpdatedAt: '{escape(latest_updated_at)}'
+    }};
     const countdownSeconds = 30;
     let remaining = countdownSeconds;
     let checking = false;
@@ -544,6 +688,19 @@ def render_report_html(report_data: dict[str, Any]) -> str:
         const response = await fetch(checkUrl, {{ headers: {{ 'Accept': 'application/json' }} }});
         const data = await response.json();
         if (data && data.updated > 0) {{
+          window.location.reload();
+          return;
+        }}
+        const stateResponse = await fetch(reportStateUrl, {{ headers: {{ 'Accept': 'application/json' }} }});
+        const state = await stateResponse.json();
+        if (
+          state &&
+          (
+            Number(state.latest_stage_id || 0) > initialReportState.latestStageId ||
+            Number(state.total_events || 0) > initialReportState.totalEvents ||
+            String(state.latest_updated_at || '') !== initialReportState.latestUpdatedAt
+          )
+        ) {{
           window.location.reload();
           return;
         }}

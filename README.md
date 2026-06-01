@@ -8,8 +8,19 @@ The recommended way to run this project is using Docker Compose.
 
 ```bash
 cp .env.example .env
-# edit .env with GITHUB_TOKEN, TARGET_REPO, and PUBLIC_WEBHOOK_URL
+# edit .env locally; do not commit it
 docker-compose up -d --build
+```
+
+Minimum local `.env` for simulation:
+
+```text
+TARGET_REPO=your-user/your-fork
+GITHUB_TOKEN=
+DEVIN_API_KEY=dummy
+DEVIN_API_BASE_URL=https://api.devin.ai
+MOCK_DEVIN=true
+PUBLIC_WEBHOOK_URL=
 ```
 
 ## Run (Local Python)
@@ -92,13 +103,18 @@ curl -X POST http://localhost:8000/github/comment-test ^
   -d "{\"issue_number\":1}"
 ```
 
-## Simulate full mock pipeline
+## Simulate With Docker
+
+Set `MOCK_DEVIN=true` in `.env`, start Docker, then trigger a fake run:
 
 ```bash
-curl -X POST http://localhost:8000/simulate ^
-  -H "Content-Type: application/json" ^
-  -d "{\"issue_number\":1,\"issue_title\":\"Reports: preserve actionable failure reason when scheduled report execution fails\",\"issue_body\":\"Operators need actionable failure reasons.\"}"
+docker-compose up -d --build
+curl -X POST http://localhost:8000/simulate \
+  -H "Content-Type: application/json" \
+  -d '{"issue_number":1,"issue_title":"Reports: preserve actionable failure reason when scheduled report execution fails","issue_body":"Operators need actionable failure reasons."}'
 ```
+
+Open `http://localhost:8000/report-html`. The latest run is highlighted, and the report checks for new stages, pushes, and PRs every 30 seconds.
 
 ## Report
 

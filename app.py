@@ -385,6 +385,20 @@ def report_json():
     return store.report()
 
 
+@app.get("/report-state")
+def report_state():
+    report = store.report()
+    stages = [stage for pipeline in report.get("pipelines", []) for stage in pipeline.get("stages", [])]
+    latest_stage_id = max((int(stage.get("id") or 0) for stage in stages), default=0)
+    latest_updated_at = max((str(pipeline.get("updated_at") or "") for pipeline in report.get("pipelines", [])), default="")
+    return {
+        "total_pipelines": report.get("total_pipelines", 0),
+        "total_events": len(stages),
+        "latest_stage_id": latest_stage_id,
+        "latest_updated_at": latest_updated_at,
+    }
+
+
 @app.get("/report", response_class=HTMLResponse)
 @app.get("/report-html", response_class=HTMLResponse)
 def report_html():
