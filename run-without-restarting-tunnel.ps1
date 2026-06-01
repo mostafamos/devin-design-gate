@@ -105,6 +105,16 @@ if ($PublicBaseUrl) {
     Write-Host ""
     Write-Host "GitHub webhook Payload URL:"
     Write-Host $WebhookUrl
+
+    if (-not $NoRestart) {
+        Write-Host ""
+        Write-Host "⚠️ REMINDER: Ensure this URL matches what is configured in your GitHub Repository Webhook settings."
+        $done = Read-Host "Is this webhook configured correctly in GitHub? [Y/n]"
+        if ($done -match "^[Nn]") {
+             Write-Host "Please update GitHub with: $WebhookUrl"
+             Read-Host "Press Enter when you are done"
+        }
+    }
 } else {
     Write-Host ""
     Write-Host "PUBLIC_WEBHOOK_URL is not set in .env. Existing cloudflared tunnel was not changed."

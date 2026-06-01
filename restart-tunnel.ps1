@@ -134,18 +134,25 @@ if (-not $UpdateEnv -and -not $NoPrompt) {
 
 if ($shouldUpdateEnv) {
     Set-PublicWebhookUrl -WebhookUrl $WebhookUrl
-    Write-Host "Updated $EnvPath"
+    Write-Host "Updated .env with the new Webhook URL."
+    Write-Host "⚠️ IMPORTANT: Since the URL changed, you MUST also update it in your GitHub Repository Settings -> Webhooks!"
 } else {
     Write-Host "Skipped .env update."
 }
 
 Write-Host ""
-Write-Host "Paste this into GitHub webhook settings:"
+Write-Host "Your active GitHub webhook Payload URL is:"
 Write-Host $WebhookUrl
 
 if (-not $NoPrompt) {
     Write-Host ""
-    Read-Host "After you paste and save the GitHub webhook URL, press Enter to start the app"
+    $done = Read-Host "Have you pasted this URL into your GitHub Webhook settings? [Y/n]"
+    if ($done -match "^[Nn]") {
+        Write-Host "Please paste it into GitHub to ensure the pipeline receives events."
+        Read-Host "Press Enter when you are done to start the app"
+    } else {
+        Write-Host "Great! Starting the app..."
+    }
 }
 
 Write-Host "Starting FastAPI on $LocalBaseUrl..."
