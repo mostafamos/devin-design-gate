@@ -1,5 +1,7 @@
 # Devin Design Gate
 
+![Devin Design Gate flow](mermaid/1.png)
+
 Minimal FastAPI + LangGraph orchestrator for a design-gated Devin remediation workflow.
 
 ## Run (Docker)
