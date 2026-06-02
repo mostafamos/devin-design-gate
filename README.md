@@ -131,6 +131,8 @@ Open `http://localhost:8000/report-html`. The latest run is highlighted, and the
 
 ## Report
 
+![Live report view](mermaid/3.png)
+
 ```bash
 curl http://localhost:8000/report-html
 curl http://localhost:8000/report.json
@@ -155,6 +157,8 @@ triage -> spec -> lld -> implementation -> verification
 Each stage is saved to SQLite and appears in `/report-html`. Because the app does not dedupe labeled events, removing `devin:design-first` and adding it again starts another full run.
 
 Push webhooks for branches named `devin/*` and pull request `synchronize` webhooks are recorded as extra report events on the latest pipeline for that repo. The report links to the compare URL or PR so you can see when Devin pushed a new change after the initial run.
+
+![Devin pull request in Superset](mermaid/2.png)
 
 If GitHub missed a webhook or the app was offline when a PR was opened, call:
 
